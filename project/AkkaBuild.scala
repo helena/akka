@@ -13,9 +13,11 @@ import com.typesafe.sbtscalariform.ScalariformPlugin.ScalariformKeys
 import com.typesafe.sbtosgi.OsgiPlugin.{ OsgiKeys, osgiSettings }
 import com.typesafe.tools.mima.plugin.MimaPlugin.mimaDefaultSettings
 import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
+import ls.Plugin.{ lsSettings, LsKeys }
 import java.lang.Boolean.getBoolean
 import sbt.Tests
 import Sphinx.{ sphinxDocs, sphinxHtml, sphinxLatex, sphinxPdf, sphinxPygments, sphinxTags, sphinxVars, sphinxExts }
+import LsKeys.{ lsync, docsUrl => lsDocsUrl, tags => lsTags }
 
 object AkkaBuild extends Build {
   System.setProperty("akka.mode", "test") // Is there better place for this?
@@ -85,14 +87,16 @@ object AkkaBuild extends Build {
     )
   )
 
+  def cpsPlugin = Seq(
+    libraryDependencies <+= scalaVersion { v => compilerPlugin("org.scala-lang.plugins" % "continuations" % v) },
+    scalacOptions += "-P:continuations:enable"
+  )
+
   lazy val dataflow = Project(
     id = "akka-dataflow",
     base = file("akka-dataflow"),
     dependencies = Seq(actor, testkit % "test->test"),
-    settings = defaultSettings ++ OSGi.dataflow ++ Seq(
-      libraryDependencies <+= scalaVersion { v => compilerPlugin("org.scala-lang.plugins" % "continuations" % v) },
-      scalacOptions += "-P:continuations:enable"
-    )
+    settings = defaultSettings ++ OSGi.dataflow ++ cpsPlugin
   )
 
   lazy val testkit = Project(
@@ -206,7 +210,6 @@ object AkkaBuild extends Build {
     settings = defaultSettings ++ OSGi.mailboxesCommon ++ Seq(
       libraryDependencies ++= Dependencies.mailboxes,
       previousArtifact := akkaPreviousArtifact("akka-mailboxes-common"),
-        // DurableMailboxSpec published in akka-mailboxes-common-test
       publishArtifact in Test := true
     )
   )
@@ -360,7 +363,8 @@ object AkkaBuild extends Build {
     base = file("akka-docs"),
     dependencies = Seq(actor, testkit % "test->test", mailboxesCommon % "compile;test->test",
       remote, cluster, slf4j, agent, dataflow, transactor, fileMailbox, zeroMQ, camel, osgi, osgiAries),
-    settings = defaultSettings ++ Sphinx.settings ++ sphinxReplacements ++ Seq(
+
+    settings = defaultSettings ++ Sphinx.settings ++ sphinxReplacements ++ cpsPlugin ++ Seq(
       unmanagedSourceDirectories in Test <<= baseDirectory { _ / "rst" ** "code" get },
       libraryDependencies ++= Dependencies.docs,
       unmanagedSourceDirectories in ScalariformKeys.format in Test <<= unmanagedSourceDirectories in Test,
@@ -449,7 +453,7 @@ object AkkaBuild extends Build {
     (if (useOnlyTestTags.isEmpty) Seq.empty else Seq("-n", if (multiNodeEnabled) useOnlyTestTags.mkString("\"", " ", "\"") else useOnlyTestTags.mkString(" ")))
   }
 
-  lazy val defaultSettings = baseSettings ++ formatSettings ++ mimaSettings ++ Seq(
+  lazy val defaultSettings = baseSettings ++ formatSettings ++ mimaSettings ++ lsSettings ++ Seq(
     // compile options
     scalacOptions in Compile ++= Seq("-encoding", "UTF-8", "-target:jvm-1.6", "-deprecation", "-feature", "-unchecked", "-Xlog-reflective-calls", "-Ywarn-adapted-args"),
     javacOptions in Compile ++= Seq("-source", "1.6", "-target", "1.6", "-Xlint:unchecked", "-Xlint:deprecation"),
@@ -457,6 +461,17 @@ object AkkaBuild extends Build {
     crossVersion := CrossVersion.full,
 
     ivyLoggingLevel in ThisBuild := UpdateLogging.Quiet,
+
+    description in lsync := "Akka is the platform for the next generation of event-driven, scalable and fault-tolerant architectures on the JVM.",
+    homepage in lsync := Some(url("http://akka.io")),
+    lsTags in lsync := Seq("actors", "stm", "concurrency", "distributed", "fault-tolerance", "scala", "java", "futures", "dataflow", "remoting"),
+    lsDocsUrl in lsync := Some(url("http://akka.io/docs")),
+    licenses in lsync := Seq(("Apache 2", url("http://www.apache.org/licenses/LICENSE-2.0.html"))),
+    externalResolvers in lsync := Seq("Typesafe Releases" at "http://repo.typesafe.com/typesafe/releases"),
+
+    /**
+     * Test settings
+     */
 
     parallelExecution in Test := System.getProperty("akka.parallelExecution", "false").toBoolean,
     logBuffered in Test := System.getProperty("akka.logBufferedTests", "false").toBoolean,
@@ -624,7 +639,7 @@ object Dependencies {
 
   val kernel = Seq(Test.scalatest, Test.junit)
 
-  val camel = Seq(camelCore, Test.scalatest, Test.junit, Test.mockito)
+  val camel = Seq(camelCore, Test.scalatest, Test.junit, Test.mockito, Test.logback, Test.commonsIo)
 
   val camelSample = Seq(CamelSample.camelJetty)
 
@@ -640,10 +655,12 @@ object Dependencies {
 
   val multiNodeSample = Seq(Test.scalatest)
 }
-
+object V {
+  val Camel  = "2.10.0"
+}
 object Dependency {
   // Compile
-  val camelCore     = "org.apache.camel"            % "camel-core"                   % "2.10.0" exclude("org.slf4j", "slf4j-api") // ApacheV2
+  val camelCore     = "org.apache.camel"            % "camel-core"                   % V.Camel exclude("org.slf4j", "slf4j-api") // ApacheV2
   val config        = "com.typesafe"                % "config"                       % "0.5.2"       // ApacheV2
   val netty         = "io.netty"                    % "netty"                        % "3.5.4.Final" // ApacheV2
   val protobuf      = "com.google.protobuf"         % "protobuf-java"                % "2.4.1"       // New BSD
@@ -674,7 +691,7 @@ object Dependency {
 
   // Camel Sample
   object CamelSample {
-    val camelJetty  = "org.apache.camel"            % "camel-jetty"                  % "2.10.0" // ApacheV2
+    val camelJetty  = "org.apache.camel"            % "camel-jetty"                  % V.Camel // ApacheV2
   }
 
 }
