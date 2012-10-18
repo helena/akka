@@ -18,25 +18,22 @@ class MetricsAwareClusterNodeSelectorSpec extends ClusterMetricsRouteeSelectorSp
 
     "select the address of the node with the lowest memory" in {
       for (i ← 0 to 10) { // run enough times to insure we test differing metric values
-        try {
-          val map = nodes.map(n ⇒ n.address -> MetricValues.unapply(n.heapMemory)).toMap
-          val (used1, committed1, max1) = map.get(node1.address).get
-          val (used2, committed2, max2) = map.get(node2.address).get
-          val diff1 = max1 match {
-            case Some(m) ⇒ ((committed1 - used1) + (m - used1) + (m - committed1))
-            case None    ⇒ committed1 - used1
-          }
-          val diff2 = max2 match {
-            case Some(m) ⇒ ((committed2 - used2) + (m - used2) + (m - committed2))
-            case None    ⇒ committed2 - used2
-          }
-          val testMin = Set(diff1, diff2).min
-          val expectedAddress = if (testMin == diff1) node1.address else node2.address
-          val address = selectByMemory(nodes.toSet).get
-          address must be(expectedAddress)
-        } catch {
-          case NonFatal(e) ⇒ println("spec error=" + e)
+
+        val map = nodes.map(n ⇒ n.address -> MetricValues.unapply(n.heapMemory)).toMap
+        val (used1, committed1, max1) = map.get(node1.address).get
+        val (used2, committed2, max2) = map.get(node2.address).get
+        val diff1 = max1 match {
+          case Some(m) ⇒ ((committed1 - used1) + (m - used1) + (m - committed1))
+          case None    ⇒ committed1 - used1
         }
+        val diff2 = max2 match {
+          case Some(m) ⇒ ((committed2 - used2) + (m - used2) + (m - committed2))
+          case None    ⇒ committed2 - used2
+        }
+        val testMin = Set(diff1, diff2).min
+        val expectedAddress = if (testMin == diff1) node1.address else node2.address
+        val address = selectByMemory(nodes.toSet).get
+        address must be(expectedAddress)
       }
     }
     "select the address of the node with the lowest network latency" in {
