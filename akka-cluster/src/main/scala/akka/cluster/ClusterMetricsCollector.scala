@@ -20,7 +20,8 @@ import akka.cluster.MemberStatus.Up
 import java.lang.management.{ OperatingSystemMXBean, MemoryMXBean, ManagementFactory }
 import java.lang.reflect.Method
 import java.lang.System.{ currentTimeMillis ⇒ newTimestamp }
-import akka.cluster.NodeMetrics.Cpu
+import akka.cluster.NodeMetrics.{ MetricValues, Cpu }
+import util.control.NonFatal
 
 /**
  * INTERNAL API.
@@ -345,7 +346,7 @@ private[cluster] case class Metric(name: String, value: Option[ScalaNumber], ave
   /**
    * Returns true if the metric is a value applicable for trending.
    */
-  def trendable: Boolean = !(Cpu.members contains name)
+  def trendable: Boolean = !(Metric.noStream contains name)
 
 }
 
@@ -353,10 +354,13 @@ private[cluster] case class Metric(name: String, value: Option[ScalaNumber], ave
  * INTERNAL API
  *
  * Companion object of Metric class.
- *
- * @author Helena Edelson
  */
 private[cluster] object Metric extends MetricNumericConverter {
+
+  /**
+   * The metrics that are already averages or finite are not trended over time.
+   */
+  private val noStream = Set("system-load-average", "total-cores", "processors")
 
   /**
    * Evaluates validity of <code>value</code> based on whether it is available (SIGAR on classpath)
@@ -367,6 +371,49 @@ private[cluster] object Metric extends MetricNumericConverter {
     case Some(v) if defined(v) ⇒ Metric(name, value, None)
     case _                     ⇒ Metric(name, None, None)
   }
+}
+
+/**
+ * Reusable logic for particular metric categories or to leverage all for routing.
+ */
+private[cluster] trait MetricsAwareClusterNodeSelector {
+  import NodeMetrics.NodeMetricsComparator.longMinAddressOrdering
+
+  /**
+   * Returns the address of the available node with the lowest cumulative difference
+   * between heap memory max and used/committed.
+   */
+  def selectByMemory(nodes: Set[NodeMetrics]): Option[Address] = Try(Some(nodes.map {
+    n ⇒
+      val (used, committed, max) = MetricValues.unapply(n.heapMemory)
+      (n.address, max match {
+        case Some(m) ⇒ ((committed - used) + (m - used) + (m - committed))
+        case None    ⇒ committed - used
+      })
+  }.min._1)) getOrElse None
+
+  // TODO
+  def selectByNetworkLatency(nodes: Set[NodeMetrics]): Option[Address] = None
+  /* Try(nodes.map {
+      n ⇒
+        val (rxBytes, txBytes) = MetricValues.unapply(n.networkLatency).get
+        (n.address, (rxBytes + txBytes))
+    }.min._1) getOrElse None // TODO: min or max
+  */
+
+  // TODO
+  def selectByCpu(nodes: Set[NodeMetrics]): Option[Address] = None
+  /* Try(nodes.map {
+      n ⇒
+        val (loadAverage, processors, combinedCpu, cores) = MetricValues.unapply(n.cpu)
+        var cumulativeDifference = 0
+        // TODO: calculate
+        combinedCpu.get
+        cores.get
+        (n.address, cumulativeDifference)
+    }.min._1) getOrElse None  // TODO min or max
+  }*/
+
 }
 
 /**
@@ -386,8 +433,6 @@ private[cluster] object Metric extends MetricNumericConverter {
  * @param timestamp the time of sampling
  *
  * @param metrics the array of sampled [[akka.actor.Metric]]
- *
- * @author Helena Edelson
  */
 private[cluster] case class NodeMetrics(address: Address, timestamp: Long, metrics: Set[Metric] = Set.empty[Metric]) extends ClusterMessage {
   import NodeMetrics._
@@ -408,7 +453,7 @@ private[cluster] case class NodeMetrics(address: Address, timestamp: Long, metri
   def same(that: NodeMetrics): Boolean = address == that.address
 
   /**
-   * Of all the data streams, heap memory used fluctuates with the most: with each sampling.
+   * Of all the data streams, this fluctuates the most.
    */
   def heapMemory: HeapMemory = HeapMemory(metric("heap-memory-used"), metric("heap-memory-committed"), metric("heap-memory-max"))
 
@@ -427,8 +472,6 @@ private[cluster] case class NodeMetrics(address: Address, timestamp: Long, metri
  *
  * The following extractors and orderings hide the implementation from cluster metric consumers
  * such as load balancers.
- *
- * @author Helena Edelson
  */
 private[cluster] object NodeMetrics {
 
@@ -468,7 +511,7 @@ private[cluster] object NodeMetrics {
     def unapply(v: Cpu): Tuple4[Double, Int, Option[Double], Option[Int]] =
       (v.systemLoadAverage.value.get.doubleValue(),
         v.processors.value.get.intValue(),
-        Try(Some(v.combinedCpu.value.get.doubleValue())) getOrElse None,
+        Try(Some(v.combinedCpu.average.get.ewma.doubleValue())) getOrElse None,
         Try(Some(v.cores.value.get.intValue())) getOrElse None)
   }
 
@@ -502,12 +545,6 @@ private[cluster] object NodeMetrics {
    */
   private[cluster] case class Cpu(systemLoadAverage: Metric, processors: Metric, combinedCpu: Metric, cores: Metric) extends MetricValues
 
-  /**
-   * The metrics that are already averages or finite are not trended over time.
-   */
-  private[cluster] object Cpu {
-    val members = Set("system-load-average", "processors", "total-cores", "cpu-combined")
-  }
 }
 
 /**

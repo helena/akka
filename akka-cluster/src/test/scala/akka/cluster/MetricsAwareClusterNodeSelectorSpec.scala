@@ -6,8 +6,9 @@ package akka.cluster
 
 import akka.testkit.AkkaSpec
 import akka.actor.Address
-import routing.MetricsAwareClusterNodeSelector
 import akka.cluster.NodeMetrics.MetricValues
+import util.control.NonFatal
+import util.Try
 
 @org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
 class MetricsAwareClusterNodeSelectorSpec extends ClusterMetricsRouteeSelectorSpec with MetricsAwareClusterNodeSelector {
@@ -15,33 +16,36 @@ class MetricsAwareClusterNodeSelectorSpec extends ClusterMetricsRouteeSelectorSp
 
   "MetricsAwareClusterNodeSelector" must {
 
-    "route to the correct routee based on selectByMemory" in {
+    "select the address of the node with the lowest memory" in {
       for (i ← 0 to 10) { // run enough times to insure we test differing metric values
-        val map = nodes.map(n ⇒ n.address -> MetricValues.unapply(n.heapMemory)).toMap
-        val (used1, committed1, max1) = map.get(node1.address).get
-        val (used2, committed2, max2) = map.get(node2.address).get
-
-        val diff1 = max1 match {
-          case Some(m) ⇒ ((committed1 - used1) + (m - used1) + (m - committed1))
-          case None    ⇒ committed1 - used1
+        try {
+          val map = nodes.map(n ⇒ n.address -> MetricValues.unapply(n.heapMemory)).toMap
+          val (used1, committed1, max1) = map.get(node1.address).get
+          val (used2, committed2, max2) = map.get(node2.address).get
+          val diff1 = max1 match {
+            case Some(m) ⇒ ((committed1 - used1) + (m - used1) + (m - committed1))
+            case None    ⇒ committed1 - used1
+          }
+          val diff2 = max2 match {
+            case Some(m) ⇒ ((committed2 - used2) + (m - used2) + (m - committed2))
+            case None    ⇒ committed2 - used2
+          }
+          val testMin = Set(diff1, diff2).min
+          val expectedAddress = if (testMin == diff1) node1.address else node2.address
+          val address = selectByMemory(nodes.toSet).get
+          address must be(expectedAddress)
+        } catch {
+          case NonFatal(e) ⇒ println("spec error=" + e)
         }
-        val diff2 = max2 match {
-          case Some(m) ⇒ ((committed2 - used2) + (m - used2) + (m - committed2))
-          case None    ⇒ committed2 - used2
-        }
-        val testMin = Set(diff1, diff2).min
-        val expectedAddress = if (testMin == diff1) node1.address else node2.address
-        val address = selectByMemory(nodes.toSet).get
-        address must be(expectedAddress)
       }
     }
-    "route to the correct routee based on selectByNetworkLatency" in {
+    "select the address of the node with the lowest network latency" in {
       // TODO
     }
-    "route to the correct routee based on selectByCpu" in {
+    "select the address of the node with the best CPU health" in {
       // TODO
     }
-    "route to the correct routee based on all metric categories monitored" in {
+    "select the address of the node with the best overall health based on all metric categories monitored" in {
       // TODO
     }
   }
@@ -66,7 +70,7 @@ abstract class ClusterMetricsRouteeSelectorSpec extends AkkaSpec(MetricsEnabledS
         n.copy(metrics = collector.sample.metrics.flatMap(latest ⇒ n.metrics.collect {
           case streaming if latest same streaming ⇒
             streaming.average match {
-              case Some(e) ⇒ streaming.copy(value = latest.value, average = Some(e :+ latest.value.get))
+              case Some(e) ⇒ streaming.copy(value = latest.value, average = Try(Some(e :+ latest.value.get)) getOrElse None)
               case None    ⇒ streaming.copy(value = latest.value)
             }
         }))

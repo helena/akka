@@ -4,16 +4,7 @@
 
 package akka.cluster
 
-import akka.testkit.AkkaSpec
-import akka.actor.{ ActorRef, Address }
-import java.lang.System.{ currentTimeMillis ⇒ newTimestamp }
-import org.scalatest.BeforeAndAfter
-import routing.LoadBalancer
-import util.{ Success, Try }
-import math.ScalaNumber
-import akka.routing.RouteeProvider
-import akka.cluster.NodeMetrics.{ Cpu, NetworkLatency, HeapMemory, MetricValues }
-import concurrent.forkjoin.ThreadLocalRandom
+import akka.actor.Address
 
 @org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
 class NodeMetricsComparatorSpec extends ClusterMetricsRouteeSelectorSpec {
