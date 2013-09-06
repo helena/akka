@@ -12,6 +12,7 @@ import akka.cluster.MemberStatus._
 import akka.event.EventStream
 import akka.actor.AddressTerminated
 import akka.dispatch.{ UnboundedMessageQueueSemantics, RequiresMessageQueue }
+import akka.cluster.ClusterNetworkTopology.NetworkTopology
 
 /**
  * Domain events published to the event bus.
@@ -148,6 +149,11 @@ object ClusterEvent {
    * A member is considered as unreachable by the failure detector.
    */
   case class UnreachableMember(member: Member) extends ClusterDomainEvent
+
+  /**
+   * Current snapshot of cluster node metrics. Published to subscribers.
+   */
+  case class ClusterTopologyChanged(topology: NetworkTopology) extends ClusterDomainEvent
 
   /**
    * Current snapshot of cluster node metrics. Published to subscribers.

@@ -52,6 +52,7 @@ class ClusterConfigSpec extends AkkaSpec {
       MetricsInterval must be(3 seconds)
       MetricsGossipInterval must be(3 seconds)
       MetricsMovingAverageHalfLife must be(12 seconds)
+      TopologyAvailabilityZones must not be (TopologyAvailabilityZones.isEmpty)
     }
   }
 }

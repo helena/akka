@@ -91,5 +91,6 @@ final class ClusterSettings(val config: Config, val systemName: String) {
     Duration(cc.getMilliseconds("metrics.moving-average-half-life"), MILLISECONDS)
   } requiring (_ > Duration.Zero, "metrics.moving-average-half-life must be > 0")
 
+  val TopologyAvailabilityZones = cc.getConfig("network-topology.availability-zones")
 }
 
