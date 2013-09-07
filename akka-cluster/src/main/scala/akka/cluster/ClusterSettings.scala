@@ -3,17 +3,17 @@
  */
 package akka.cluster
 
-import scala.collection.immutable
-import com.typesafe.config.Config
-import com.typesafe.config.ConfigObject
-import scala.concurrent.duration.Duration
 import java.util.concurrent.TimeUnit.MILLISECONDS
+
+import scala.collection.immutable
+import scala.concurrent.duration.{ Duration, FiniteDuration }
 import akka.actor.Address
 import akka.actor.AddressFromURIString
 import akka.dispatch.Dispatchers
 import akka.util.Helpers.Requiring
-import scala.concurrent.duration.FiniteDuration
 import akka.japi.Util.immutableSeq
+import com.typesafe.config.Config
+import com.typesafe.config.ConfigObject
 
 final class ClusterSettings(val config: Config, val systemName: String) {
 
@@ -90,6 +90,6 @@ final class ClusterSettings(val config: Config, val systemName: String) {
   val MetricsMovingAverageHalfLife: FiniteDuration = {
     Duration(cc.getMilliseconds("metrics.moving-average-half-life"), MILLISECONDS)
   } requiring (_ > Duration.Zero, "metrics.moving-average-half-life must be > 0")
-
+  val TopologyAvailabilityZones = cc.getConfig("topology.data-centers")
 }
 
