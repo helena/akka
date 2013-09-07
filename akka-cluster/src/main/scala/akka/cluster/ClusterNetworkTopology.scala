@@ -78,7 +78,7 @@ private[cluster] object ClusterNetworkTopology {
   /**
    * Light weight partition in the topology describing clusters of data centers.
    */
-  case class Region(name: String, dataCenters: immutable.Set[DataCenter] = Set.empty)
+  case class Region(name: String, dataCenters: immutable.Set[DataCenter] = Set.empty) extends Graph
 
   case class Topology(regions: immutable.Set[Region]) extends Graph {
 
